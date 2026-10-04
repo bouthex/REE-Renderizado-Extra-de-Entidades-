@@ -18,6 +18,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class MinecraftMixin {
 	@Inject(method = "shouldEntityAppearGlowing", at = @At("HEAD"), cancellable = true)
 	private void ree$contornoLejano(Entity entity, CallbackInfoReturnable<Boolean> cir) {
-		if (ConfigCliente.contorno && REECliente.esLejano(entity)) cir.setReturnValue(true);
+		if (ConfigCliente.contorno && REECliente.llevaContorno(entity)) cir.setReturnValue(true);
 	}
 }

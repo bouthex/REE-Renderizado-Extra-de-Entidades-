@@ -21,11 +21,11 @@ public class REEPantalla extends Screen {
 	protected void init() {
 		ancho = Math.min(340, this.width - 20);
 		int bh = 20, sep = 24;
-		alto = 50 + 4 * sep + 44;
+		alto = 60 + 6 * sep + 34;
 		x0 = (this.width - ancho) / 2;
 		y0 = Math.max(6, (this.height - alto) / 2);
 		int x = x0 + 10, w = ancho - 20;
-		int y = y0 + 44;
+		int y = y0 + 54;
 
 		this.addRenderableWidget(Button.builder(si("REE activado", ConfigCliente.activo), b -> {
 			ConfigCliente.activo = !ConfigCliente.activo;
@@ -59,6 +59,18 @@ public class REEPantalla extends Screen {
 			ConfigCliente.hud = !ConfigCliente.hud;
 			b.setMessage(si("Lista en pantalla (nombre, metros, dirección)", ConfigCliente.hud));
 		}).bounds(x, y, w, bh).build());
+		y += sep;
+
+		this.addRenderableWidget(Button.builder(si("Marcadores sobre el horizonte", ConfigCliente.marcadores), b -> {
+			ConfigCliente.marcadores = !ConfigCliente.marcadores;
+			b.setMessage(si("Marcadores sobre el horizonte", ConfigCliente.marcadores));
+		}).bounds(x, y, w, bh).build());
+		y += sep;
+
+		this.addRenderableWidget(Button.builder(si("Radar (barra localizadora, cualquier server)", ConfigCliente.radar), b -> {
+			ConfigCliente.radar = !ConfigCliente.radar;
+			b.setMessage(si("Radar (barra localizadora, cualquier server)", ConfigCliente.radar));
+		}).bounds(x, y, w, bh).build());
 
 		this.addRenderableWidget(Button.builder(Component.literal("Guardar y salir"), b -> onClose())
 				.bounds(this.width / 2 - 75, y0 + alto - 26, 150, 20).build());
@@ -70,16 +82,21 @@ public class REEPantalla extends Screen {
 
 	private static Component distancia() {
 		int c = ConfigCliente.chunks;
-		return Component.literal("§fVer jugadores hasta: §e" + c + " chunks §7(" + (c * 16) + " bloques)");
+		return Component.literal("§fCon REE en el server: §e" + c + " chunks §7(" + (c * 16) + " bloques)");
 	}
 
-	/** Estado del servidor en el que estás, para que se entienda por qué ves o no ves lejos. */
-	private String estado() {
-		if (this.minecraft == null || this.minecraft.level == null) return "§7Entrá a un mundo o servidor para ver el estado.";
-		if (!REECliente.servidorTieneREE) return "§cEste servidor no tiene REE §7(instalalo en el server o en el host del LAN)";
-		if (!REECliente.servidorActivo) return "§eEl servidor tiene REE apagado.";
-		int efectivo = Math.min(ConfigCliente.chunks, REECliente.servidorMax);
-		return "§aServidor con REE ✔ §7permite " + REECliente.servidorMax + " chunks · vas a ver hasta §f" + efectivo;
+	/** Estado del servidor en el que estás, en dos renglones. */
+	private String[] estado() {
+		if (this.minecraft == null || this.minecraft.level == null)
+			return new String[] { "§7Entrá a un mundo o servidor para ver el estado.", "" };
+		if (REECliente.servidorTieneREE && REECliente.servidorActivo) {
+			int efectivo = Math.min(ConfigCliente.chunks, REECliente.servidorMax);
+			return new String[] { "§aModo completo ✔ §7el servidor tiene REE (hasta " + REECliente.servidorMax + " chunks)",
+					"§7Ves jugadores caminando hasta §f" + efectivo + " chunks" };
+		}
+		int rd = this.minecraft.options.renderDistance().get();
+		return new String[] { "§eModo universal §7(este servidor no tiene REE)",
+				"§7Cuerpos hasta tu distancia (" + rd + " chunks) · más lejos: radar" };
 	}
 
 	@Override
@@ -105,8 +122,9 @@ public class REEPantalla extends Screen {
 		m.popMatrix();
 		String sub = "Renderizado Extra de Entidades · " + REE.VERSION;
 		g.text(this.font, sub, this.width / 2 - this.font.width(sub) / 2, y0 + 23, 0xFF9E9E9E, false);
-		String est = estado();
-		g.text(this.font, est, this.width / 2 - this.font.width(est) / 2, y0 + 33, 0xFFFFFFFF, false);
+		String[] est = estado();
+		g.text(this.font, est[0], this.width / 2 - this.font.width(est[0]) / 2, y0 + 33, 0xFFFFFFFF, false);
+		g.text(this.font, est[1], this.width / 2 - this.font.width(est[1]) / 2, y0 + 43, 0xFFFFFFFF, false);
 	}
 
 	@Override

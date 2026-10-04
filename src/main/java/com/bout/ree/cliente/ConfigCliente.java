@@ -21,6 +21,10 @@ public final class ConfigCliente {
 	public static boolean contorno = true;
 	/** Lista en pantalla con nombre, distancia y dirección de los jugadores lejanos. */
 	public static boolean hud = true;
+	/** Usar los datos de la barra localizadora vanilla (funciona en servidores sin REE). */
+	public static boolean radar = true;
+	/** Nombre y distancia flotando sobre el horizonte, en la dirección de cada jugador. */
+	public static boolean marcadores = true;
 
 	private ConfigCliente() {}
 
@@ -38,6 +42,8 @@ public final class ConfigCliente {
 			chunks = Math.max(2, Math.min(256, Integer.parseInt(p.getProperty("chunks", "32").trim())));
 			contorno = !"no".equalsIgnoreCase(p.getProperty("contorno", "si").trim());
 			hud = !"no".equalsIgnoreCase(p.getProperty("hud", "si").trim());
+			radar = !"no".equalsIgnoreCase(p.getProperty("radar", "si").trim());
+			marcadores = !"no".equalsIgnoreCase(p.getProperty("marcadores", "si").trim());
 		} catch (Exception e) {
 			REE.LOG.warn("REE: no se pudo leer ree.properties, uso valores por defecto", e);
 		}
@@ -50,6 +56,8 @@ public final class ConfigCliente {
 		p.setProperty("chunks", String.valueOf(chunks));
 		p.setProperty("contorno", contorno ? "si" : "no");
 		p.setProperty("hud", hud ? "si" : "no");
+		p.setProperty("radar", radar ? "si" : "no");
+		p.setProperty("marcadores", marcadores ? "si" : "no");
 		try (Writer w = Files.newBufferedWriter(archivo(), StandardCharsets.UTF_8)) {
 			p.store(w, "REE (cliente) - se cambia mejor desde Mod Menu");
 		} catch (Exception e) {

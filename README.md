@@ -4,6 +4,20 @@ Mod Fabric para **Minecraft 26.2** que te deja ver a los otros jugadores mucho m
 de renderizado, **moviéndose en tiempo real**, sin cargar ni un chunk extra. Funciona en servidores,
 en mundos abiertos en LAN y en cualquier partida con más gente.
 
+## Dos modos
+
+**Modo universal (cualquier servidor, sin tocar nada del server):**
+- Ves el cuerpo real de los jugadores en todo el rango que el servidor te manda. Vanilla los esconde a unos
+  64 bloques aunque los tenga; REE no. Subí tu distancia de renderizado al máximo que permita el server.
+- Más lejos, REE lee la barra localizadora vanilla: hasta 332 bloques sabe el chunk (precisión ~16 bloques),
+  y más allá solo la dirección. Muestra nombre, distancia y un marcador en pantalla en la dirección real.
+  Funciona si el server no apagó la regla `locatorBar` (viene prendida por defecto).
+
+**Modo completo (servidor o host de LAN con REE):** los jugadores se ven caminando, con su cuerpo, hasta
+los chunks que elijas (hasta 256), sin cargar chunks.
+
+Colores: celeste = posición exacta, amarillo = aproximada (chunk), naranja = solo dirección.
+
 ## Instalación
 
 | Dónde | ¿Hace falta REE? |

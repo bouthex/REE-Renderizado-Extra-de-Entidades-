@@ -9,7 +9,8 @@
 		"cliente.LevelRendererMixin",
 		"cliente.EntityRendererMixin",
 		"cliente.EntityMixin",
-		"cliente.MinecraftMixin"
+		"cliente.MinecraftMixin",
+		"cliente.WaypointPacketMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
