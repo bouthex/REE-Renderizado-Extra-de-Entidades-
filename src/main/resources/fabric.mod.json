@@ -1,0 +1,26 @@
+{
+	"schemaVersion": 1,
+	"id": "ree",
+	"version": "${version}",
+	"name": "REE - Renderizado Extra de Entidades",
+	"description": "Ver a los otros jugadores mucho más allá de tu distancia de renderizado, moviéndose en tiempo real, sin cargar chunks extra. Funciona en servidores, LAN y mundos compartidos.",
+	"authors": ["bout"],
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["com.bout.ree.REE"],
+		"client": ["com.bout.ree.cliente.REECliente"],
+		"modmenu": ["com.bout.ree.cliente.REEModMenu"]
+	},
+	"mixins": ["ree.mixins.json"],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"modmenu": "*"
+	},
+	"icon": "assets/ree/icon.png"
+}
