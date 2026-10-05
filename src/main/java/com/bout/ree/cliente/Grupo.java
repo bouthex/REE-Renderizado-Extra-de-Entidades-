@@ -52,6 +52,8 @@ public final class Grupo {
 	private static volatile String codigoActivo = "";
 	private static volatile SecretKeySpec llave;
 	private static volatile String canal = "";
+	/** Mi UUID: los mensajes propios vuelven del broker y hay que ignorarlos (si no, "parpadea"). */
+	private static volatile UUID miUuid;
 	private static int ticks;
 
 	private Grupo() {}
@@ -113,6 +115,7 @@ public final class Grupo {
 			cerrar();
 			prepararLlave(codigo);
 		}
+		miUuid = mc.player.getUUID();
 		long ahora = System.currentTimeMillis();
 		for (String[] b : BROKERS) {
 			String k = b[0];
@@ -140,7 +143,6 @@ public final class Grupo {
 			byte[] cifrado = cifrar(o.toString().getBytes(StandardCharsets.UTF_8));
 			if (cifrado != null) for (Conexion c : CONEXIONES.values()) if (c.lista) c.publicar(cifrado);
 		}
-		AMIGOS.remove(mc.player.getUUID()); // nuestro propio mensaje vuelve del broker
 		AMIGOS.values().removeIf(a -> ahora - a.ms() > 6000);
 	}
 
@@ -189,6 +191,7 @@ public final class Grupo {
 			long t = o.get("t").getAsLong();
 			if (Math.abs(System.currentTimeMillis() - t) > 30000) return; // mensaje viejo o reloj muy corrido
 			UUID id = UUID.fromString(o.get("u").getAsString());
+			if (id.equals(miUuid)) return; // soy yo
 			// llega por dos brokers: si este dato es más viejo que el que ya tenemos, se descarta
 			Amigo anterior = AMIGOS.get(id);
 			if (anterior != null && t <= anterior.envio()) return;

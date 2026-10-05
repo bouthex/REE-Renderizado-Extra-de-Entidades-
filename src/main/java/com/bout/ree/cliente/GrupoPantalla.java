@@ -73,7 +73,9 @@ public class GrupoPantalla extends Screen {
 		this.addRenderableWidget(nombre);
 		this.addRenderableWidget(Button.builder(Component.literal("+ Amigo"), b -> {
 			String n = nombre.getValue().trim();
-			if (n.matches("[A-Za-z0-9_]{2,16}") && !ConfigCliente.esAmigoExacto(n)) {
+			if (this.minecraft.player != null && n.equalsIgnoreCase(this.minecraft.player.getName().getString())) {
+				aviso = "§eEse sos vos :)";
+			} else if (n.matches("[A-Za-z0-9_]{2,16}") && !ConfigCliente.esAmigoExacto(n)) {
 				ConfigCliente.AMIGOS.add(n);
 				reabrir("§aAgregaste a " + n);
 			} else {

@@ -41,7 +41,7 @@ import java.util.UUID;
  */
 public class REECliente implements ClientModInitializer {
 	/** Tipos de objetivo: de dónde sale el dato y qué tan preciso es. */
-	public static final int EXACTO = 1, CHUNK = 2, DIRECCION = 3, GRUPO = 4;
+	public static final int EXACTO = 1, CHUNK = 2, DIRECCION = 3, GRUPO = 4, ESTIMADO = 5;
 
 	/** Un jugador lejano para mostrar. (x, y, z) es dónde dibujar el marcador; para DIRECCION es un punto lejano en esa dirección. */
 	public record Lejano(UUID uuid, String nombre, double x, double y, double z, double distancia, float angulo, int tipo) {}
@@ -201,8 +201,16 @@ public class REECliente implements ClientModInitializer {
 				Radar.Punto pt = e.getValue();
 				if (pt.tipo() == Radar.DIRECCION) {
 					double a = Math.toRadians(pt.anguloGrados());
-					infos.add(new Lejano(id, nombre, yo.getX() - Math.sin(a) * 2000, yo.getEyeY(), yo.getZ() + Math.cos(a) * 2000,
-							Double.MAX_VALUE, relativo(pt.anguloGrados(), yo.getYRot()), DIRECCION));
+					Radar.Estimacion est = Radar.estimacion(id);
+					if (est != null) {
+						// triangulado: dirección exacta + distancia estimada
+						double d = est.distancia();
+						infos.add(new Lejano(id, nombre, yo.getX() - Math.sin(a) * d, yo.getEyeY(), yo.getZ() + Math.cos(a) * d,
+								d, relativo(pt.anguloGrados(), yo.getYRot()), ESTIMADO));
+					} else {
+						infos.add(new Lejano(id, nombre, yo.getX() - Math.sin(a) * 2000, yo.getEyeY(), yo.getZ() + Math.cos(a) * 2000,
+								Double.MAX_VALUE, relativo(pt.anguloGrados(), yo.getYRot()), DIRECCION));
+					}
 				} else {
 					double dx = pt.x() + 0.5 - yo.getX(), dz = pt.z() + 0.5 - yo.getZ();
 					int tipo = pt.tipo() == Radar.CHUNK ? CHUNK : EXACTO;
@@ -229,6 +237,7 @@ public class REECliente implements ClientModInitializer {
 	private static String distanciaTexto(Lejano j) {
 		return switch (j.tipo()) {
 			case DIRECCION -> "+330 m";
+			case ESTIMADO -> "≈" + Math.round(j.distancia() / 10.0) * 10 + " m";
 			case CHUNK -> "~" + Math.round(j.distancia()) + " m";
 			default -> Math.round(j.distancia()) + " m";
 		};
@@ -237,6 +246,7 @@ public class REECliente implements ClientModInitializer {
 	private static int color(Lejano j) {
 		return switch (j.tipo()) {
 			case GRUPO -> 0xFF7CE38B;     // verde: amigo del grupo
+			case ESTIMADO -> 0xFFC792EA;  // violeta: triangulado
 			case DIRECCION -> 0xFFFFB74D; // naranja: solo dirección
 			case CHUNK -> 0xFFFFE082;     // amarillo: aproximado
 			default -> 0xFF6FD3FF;        // celeste: exacto
@@ -265,9 +275,18 @@ public class REECliente implements ClientModInitializer {
 		m.popMatrix();
 	}
 
+	private static int alfa(int color, float a) {
+		int al = Math.max(0x14, Math.min(0xFF, Math.round(a * 255)));
+		return (al << 24) | (color & 0xFFFFFF);
+	}
+
 	/**
-	 * Marcadores proyectados en 3D: aparecen en pantalla justo donde está cada jugador (también en altura),
-	 * como un waypoint. Si está fuera de la vista, queda pegado al borde con una flechita.
+	 * Marcadores proyectados en 3D, pensados para no estorbar:
+	 *  - una sola línea chica ("nombre · 340 m"), sin fondo, solo sombra
+	 *  - cerca de la mira se vuelven casi invisibles (para poder apuntar)
+	 *  - con el arco/ballesta/tridente tensado se atenúan todos
+	 *  - si dos etiquetas se pisan, la más lejana se corre arriba o queda solo el punto
+	 *  - a los jugadores que ya se ven con su cuerpo no se les dibuja punto, solo el nombre arriba de la cabeza
 	 */
 	private static void dibujarMarcadores(GuiGraphicsExtractor g, Minecraft mc, List<Lejano> l, float pt, double seg) {
 		Font font = mc.font;
@@ -275,18 +294,19 @@ public class REECliente implements ClientModInitializer {
 		int w = mc.getWindow().getGuiScaledWidth(), h = mc.getWindow().getGuiScaledHeight();
 		Vec3 ojo = yo.getEyePosition(pt);
 		double yaw = Math.toRadians(yo.getViewYRot(pt)), pitch = Math.toRadians(yo.getViewXRot(pt));
-		// base de la cámara: adelante, derecha, arriba
 		double fx = -Math.sin(yaw) * Math.cos(pitch), fy = -Math.sin(pitch), fz = Math.cos(yaw) * Math.cos(pitch);
 		double rx = -Math.cos(yaw), rz = -Math.sin(yaw);
 		double ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy; // arriba = derecha × adelante
 		double tanV = Math.tan(Math.toRadians(mc.options.fov().get()) / 2);
 		double suavizado = Math.min(1, seg * 10);
+		boolean apuntando = yo.isUsingItem();
+		float escala = 0.6f;
 
+		List<int[]> ocupados = new ArrayList<>(); // rectángulos ya dibujados {x0, y0, x1, y1}
 		Set<UUID> usados = new HashSet<>();
-		for (Lejano j : l) {
+		for (Lejano j : l) { // la lista viene ordenada: los más cercanos primero, tienen prioridad
 			usados.add(j.uuid());
 			double[] p = SUAVE.computeIfAbsent(j.uuid(), k -> new double[] { j.x(), j.y(), j.z() });
-			// movimiento suave entre actualizaciones (sin saltos); si es un salto enorme, se teletransporta
 			if (Math.abs(p[0] - j.x()) + Math.abs(p[2] - j.z()) > 64) { p[0] = j.x(); p[1] = j.y(); p[2] = j.z(); }
 			p[0] += (j.x() - p[0]) * suavizado;
 			p[1] += (j.y() - p[1]) * suavizado;
@@ -295,66 +315,101 @@ public class REECliente implements ClientModInitializer {
 			double dx = p[0] - ojo.x, dy = p[1] - ojo.y, dz = p[2] - ojo.z;
 			double xc = dx * rx + dz * rz, yc = dx * ux + dy * uy + dz * uz, zc = dx * fx + dy * fy + dz * fz;
 			int c = color(j);
-			boolean borde = false;
+			boolean cuerpoVisible = j.tipo() == EXACTO && zc > 0.1;
+
+			// fuera de la vista: flechita chica en el borde, nada más
 			float sx, sy;
 			if (zc > 0.1) {
 				sx = (float) (w / 2.0 + (xc / (zc * tanV)) * (h / 2.0));
 				sy = (float) (h / 2.0 - (yc / (zc * tanV)) * (h / 2.0));
-				if (sx < 8 || sx > w - 8 || sy < 14 || sy > h - 30) borde = true;
 			} else {
-				sx = w / 2f; // detrás: se pega al costado hacia donde conviene girar
-				sy = h / 2f;
-				borde = true;
+				sx = -1; sy = h / 2f;
 			}
-			if (borde) {
+			if (zc <= 0.1 || sx < 6 || sx > w - 6 || sy < 10 || sy > h - 30) {
 				boolean derecha = zc > 0.1 ? sx > w / 2f : xc > 0;
-				sx = derecha ? w - 10 : 10;
-				sy = Math.max(20, Math.min(h - 40, sy));
-				textoChico(g, font, derecha ? "›" : "‹", sx + (derecha ? 5 : -5), sy - 3, 1f, c);
+				float by = Math.max(20, Math.min(h - 40, sy));
+				textoChico(g, font, derecha ? "›" : "‹", derecha ? w - 5 : 5, by - 4, 1f, alfa(c, apuntando ? 0.3f : 0.7f));
+				continue;
 			}
-			// punto
+
+			// transparencia: casi invisible cerca de la mira, más suave apuntando y a lo lejos
+			double aCentro = Math.hypot(sx - w / 2.0, sy - h / 2.0);
+			float a = (float) Math.max(0.08, Math.min(1, (aCentro - 10) / 60.0));
+			if (apuntando) a *= 0.35f;
+			if (j.tipo() == DIRECCION) a *= 0.7f;
+			float aTexto = 0.9f * a, aPunto = 0.75f * a;
+
 			int ix = Math.round(sx), iy = Math.round(sy);
-			g.fill(ix - 2, iy - 2, ix + 2, iy + 2, 0xCC000000);
-			g.fill(ix - 1, iy - 1, ix + 1, iy + 1, c);
-			// nombre y distancia, chiquitos, con fondo suave
-			String nombre = j.nombre(), dist = distanciaTexto(j);
-			float anchoTxt = Math.max(font.width(nombre) * 0.6f, font.width(dist) * 0.5f);
-			g.fill(Math.round(sx - anchoTxt / 2 - 2), iy - 15, Math.round(sx + anchoTxt / 2 + 2), iy - 3, 0x66000000);
-			textoChico(g, font, nombre, sx, iy - 14, 0.6f, 0xFFFFFFFF);
-			textoChico(g, font, dist, sx, iy - 8, 0.5f, c);
+			if (!cuerpoVisible) {
+				g.fill(ix - 1, iy - 1, ix + 2, iy + 2, alfa(0x000000, aPunto * 0.6f));
+				g.fill(ix, iy, ix + 1, iy + 1, alfa(c, aPunto));
+			}
+
+			// etiqueta de una sola línea; si choca con otra, se corre hacia arriba
+			String nombre = j.nombre(), dist = " · " + distanciaTexto(j);
+			int anchoN = Math.round(font.width(nombre) * escala), anchoD = Math.round(font.width(dist) * escala);
+			int total = anchoN + anchoD, alto = Math.round(9 * escala);
+			int lx = ix - total / 2, ly = iy - (cuerpoVisible ? 10 : 8) - alto;
+			boolean puesto = false;
+			for (int intento = 0; intento < 3 && !puesto; intento++) {
+				int[] r = { lx - 1, ly - 1, lx + total + 1, ly + alto + 1 };
+				boolean choca = false;
+				for (int[] o : ocupados) {
+					if (r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1]) { choca = true; break; }
+				}
+				if (!choca) { ocupados.add(r); puesto = true; } else ly -= alto + 2;
+			}
+			if (!puesto) continue; // muy amontonado: queda solo el punto
+
+			Matrix3x2fStack m = g.pose();
+			m.pushMatrix();
+			m.translate(lx, ly);
+			m.scale(escala, escala);
+			g.text(font, nombre, 0, 0, alfa(0xFFFFFF, aTexto), true);
+			g.text(font, dist, font.width(nombre), 0, alfa(c, aTexto), true);
+			m.popMatrix();
 		}
 		SUAVE.keySet().retainAll(usados);
 	}
 
-	/** Lista compacta arriba a la derecha: punto de color, nombre, distancia y flecha. */
+	/** Lista arriba a la derecha: un poco más grande para leer bien los nombres de un vistazo. */
 	private static void dibujarLista(GuiGraphicsExtractor g, Minecraft mc, List<Lejano> l) {
 		Font font = mc.font;
-		float e = 0.65f;
+		float e = 0.85f;
+		int fila = 10;
 		int w = mc.getWindow().getGuiScaledWidth();
-		int filas = Math.min(5, l.size());
+		int filas = Math.min(6, l.size());
 		int anchoMax = 0;
-		List<String> textos = new ArrayList<>();
 		for (int i = 0; i < filas; i++) {
 			Lejano j = l.get(i);
-			String t = j.nombre() + " " + distanciaTexto(j) + " " + FLECHAS[Math.floorMod(Math.round(j.angulo() / 45f), 8)];
-			textos.add(t);
-			anchoMax = Math.max(anchoMax, font.width(t));
+			anchoMax = Math.max(anchoMax, font.width(j.nombre()) + font.width("  " + distanciaTexto(j) + "  ↗"));
 		}
-		if (l.size() > filas) { textos.add("+" + (l.size() - filas)); }
-		int ancho = Math.round(anchoMax * e) + 12;
-		int fila = 7;
-		int x0 = w - 3 - ancho, y0 = 3, alto = textos.size() * fila + 4;
-		g.fill(x0, y0, x0 + ancho, y0 + alto, 0x55000000);
+		int ancho = Math.round(anchoMax * e) + 16;
+		int extra = l.size() > filas ? 1 : 0;
+		int x0 = w - 4 - ancho, y0 = 4, alto = (filas + extra) * fila + 5;
+		g.fill(x0, y0, x0 + ancho, y0 + alto, 0x50000000);
+		g.fill(x0, y0, x0 + 1, y0 + alto, 0x886FD3FF);
 
 		Matrix3x2fStack m = g.pose();
-		for (int i = 0; i < textos.size(); i++) {
-			int yy = y0 + 2 + i * fila;
-			int c = i < filas ? color(l.get(i)) : 0xFFBDBDBD;
-			g.fill(x0 + 3, yy + 2, x0 + 6, yy + 5, c);
+		for (int i = 0; i < filas; i++) {
+			Lejano j = l.get(i);
+			int yy = y0 + 3 + i * fila;
+			int c = color(j);
+			g.fill(x0 + 5, yy + 3, x0 + 9, yy + 7, c);
+			String flecha = FLECHAS[Math.floorMod(Math.round(j.angulo() / 45f), 8)];
 			m.pushMatrix();
-			m.translate(x0 + 9, yy + 1);
+			m.translate(x0 + 12, yy + 1);
 			m.scale(e, e);
-			g.text(font, textos.get(i), 0, 0, 0xFFEFEFEF, false);
+			g.text(font, j.nombre(), 0, 0, 0xFFFFFFFF, true);
+			String resto = "  " + distanciaTexto(j) + "  " + flecha;
+			g.text(font, resto, font.width(j.nombre()), 0, alfa(c, 0.9f), true);
+			m.popMatrix();
+		}
+		if (extra == 1) {
+			m.pushMatrix();
+			m.translate(x0 + 12, y0 + 3 + filas * fila + 1);
+			m.scale(e * 0.85f, e * 0.85f);
+			g.text(font, "+" + (l.size() - filas) + " más", 0, 0, 0xFFAAAAAA, true);
 			m.popMatrix();
 		}
 	}
