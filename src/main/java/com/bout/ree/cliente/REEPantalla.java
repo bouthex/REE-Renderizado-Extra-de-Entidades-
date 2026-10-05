@@ -21,7 +21,7 @@ public class REEPantalla extends Screen {
 	protected void init() {
 		ancho = Math.min(340, this.width - 20);
 		int bh = 20, sep = 24;
-		alto = 60 + 6 * sep + 34;
+		alto = 60 + 7 * sep + 34;
 		x0 = (this.width - ancho) / 2;
 		y0 = Math.max(6, (this.height - alto) / 2);
 		int x = x0 + 10, w = ancho - 20;
@@ -70,6 +70,12 @@ public class REEPantalla extends Screen {
 		this.addRenderableWidget(Button.builder(si("Radar (barra localizadora, cualquier server)", ConfigCliente.radar), b -> {
 			ConfigCliente.radar = !ConfigCliente.radar;
 			b.setMessage(si("Radar (barra localizadora, cualquier server)", ConfigCliente.radar));
+		}).bounds(x, y, w, bh).build());
+		y += sep;
+
+		this.addRenderableWidget(Button.builder(Component.literal("§aGrupo REE… §7(código y amigos)"), b -> {
+			ConfigCliente.guardar();
+			this.minecraft.gui.setScreen(new GrupoPantalla(this));
 		}).bounds(x, y, w, bh).build());
 
 		this.addRenderableWidget(Button.builder(Component.literal("Guardar y salir"), b -> onClose())

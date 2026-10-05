@@ -26,6 +26,15 @@ public final class ConfigCliente {
 	/** Nombre y distancia flotando sobre el horizonte, en la dirección de cada jugador. */
 	public static boolean marcadores = true;
 
+	/** Grupo REE: compartir posiciones con amigos que tengan el mismo código. Todo dentro del mod. */
+	public static boolean grupo = false;
+	/** Mandar MI posición al grupo (si está apagado, solo ves a los demás). */
+	public static boolean compartir = true;
+	/** Código del grupo: es la "llave". El que lo tiene, entra. */
+	public static String grupoCodigo = "";
+	/** Nombres de amigos. Si la lista está vacía se muestra a todos los del código. */
+	public static final java.util.List<String> AMIGOS = new java.util.ArrayList<>();
+
 	private ConfigCliente() {}
 
 	private static Path archivo() {
@@ -44,6 +53,13 @@ public final class ConfigCliente {
 			hud = !"no".equalsIgnoreCase(p.getProperty("hud", "si").trim());
 			radar = !"no".equalsIgnoreCase(p.getProperty("radar", "si").trim());
 			marcadores = !"no".equalsIgnoreCase(p.getProperty("marcadores", "si").trim());
+			grupo = "si".equalsIgnoreCase(p.getProperty("grupo", "no").trim());
+			compartir = !"no".equalsIgnoreCase(p.getProperty("compartir", "si").trim());
+			grupoCodigo = p.getProperty("grupo_codigo", "").trim();
+			AMIGOS.clear();
+			for (String n : p.getProperty("amigos", "").split(",")) {
+				if (!n.isBlank()) AMIGOS.add(n.trim());
+			}
 		} catch (Exception e) {
 			REE.LOG.warn("REE: no se pudo leer ree.properties, uso valores por defecto", e);
 		}
@@ -58,11 +74,27 @@ public final class ConfigCliente {
 		p.setProperty("hud", hud ? "si" : "no");
 		p.setProperty("radar", radar ? "si" : "no");
 		p.setProperty("marcadores", marcadores ? "si" : "no");
+		p.setProperty("grupo", grupo ? "si" : "no");
+		p.setProperty("compartir", compartir ? "si" : "no");
+		p.setProperty("grupo_codigo", grupoCodigo);
+		p.setProperty("amigos", String.join(",", AMIGOS));
 		try (Writer w = Files.newBufferedWriter(archivo(), StandardCharsets.UTF_8)) {
 			p.store(w, "REE (cliente) - se cambia mejor desde Mod Menu");
 		} catch (Exception e) {
 			REE.LOG.warn("REE: no se pudo guardar ree.properties", e);
 		}
+	}
+
+	/** ¿Este nombre se muestra? (lista vacía = todos los del código) */
+	public static boolean esAmigo(String nombre) {
+		if (AMIGOS.isEmpty()) return true;
+		for (String a : AMIGOS) if (a.equalsIgnoreCase(nombre)) return true;
+		return false;
+	}
+
+	static boolean esAmigoExacto(String nombre) {
+		for (String a : AMIGOS) if (a.equalsIgnoreCase(nombre)) return true;
+		return false;
 	}
 
 	/** Siguiente / anterior opción de distancia. */
